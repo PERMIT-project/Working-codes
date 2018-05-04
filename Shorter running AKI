@@ -1,2 +1,153 @@
 #AKI diagnostic code optimised for faster running with larger datasets
 
+load("crea.rep.rda") #Primary table with 1 row per patient per date with creatinine summarised as max per date
+
+library (taRifx)
+library(tcltk)
+library(lubridate)
+library(dplyr) 
+library(survival) #For neardate matching
+library(data.table)
+
+BASED ON THE NHS UK AKI ALGORITHM, OMITTING INDICATORS FROM URINE ALBUMIN
+
+###################################################################################
+
+#SELECT ELIGIBLE PATIENTS
+crea.rep$KDmark<-ifelse(!is.na(crea.rep$MDRDeGFR)&crea.rep$MDRDeGFR<60,1,0)
+KD<-crea.rep[crea.rep$KDmark>0,]
+a<-crea.rep[crea.rep$PatientID %in% KD$PatientID & !is.na(crea.rep$PatientID),]
+a$event.date<-as.Date(as.character(a$EntryDate),format="%Y%m%d")
+attach(a)
+########################################################################### 
+
+#Find max creatinine per day per patient
+sorted <- a %>% 
+          arrange(PatientID,event.date) %>%
+          group_by(PatientID) %>%
+          mutate(protagonist=row_number())
+<-data.frame(sorted)
+attach(a)
+
+#########################################################################
+
+# PART 2 - LOOP FOR AKI FLAGS 
+
+#LOOP FORMATION FOR COMPARING EACH TEST WITH PREVIOUS TESTS
+#CREATE A MARKER VARIABLE FOR EACH TIME AKI EALERT CRITERIA SATISFIED
+
+ewAKI<-0
+AKIyear<-0
+AKIweek<-0
+mightydate<-NA
+mightyvalue<-NA
+protagonistdos<-NA
+yearmarker<-0
+weekmarker<-0
+Dmarker<-0
+yearmedian<-0
+eekmin<-0
+Dmin<-0
+yearvalue<-0
+weekvalue<-0
+Dvalue<-0
+D<-0
+RV1<-0
+RV2<-0
+protagonistdos<-0
+protagonistvalue<-0
+
+#Assign population reference values to compare to if data is missing
+ if(Gender[i]=="M"){    
+    ref.low=62
+   ref.up=115
+    } else {    
+    ref.low=44    
+    ref.up=97}
+
+a <-a[order(PatientID, event.date),] 
+attach(a)
+##########################################################################
+for (i in 1:max(protagonist)) {
+
+mightydate<-as.Date(ifelse(protagonist==protagonist[i] & PatientID==PatientID[i],event.date[i],mightydate),origin="1970-01-01")
+protagonistdos<-ave(mightydate,PatientID,FUN=max)
+
+#Apply each test date to all other tests from the same patient to find the time difference
+
+yearmarker[i]<-ifelse(as.Date(protagonistdos)-event.date[i]<=365 & (protagonistdos-event.date[i]>90),1,yearmarker)
+ekmarker[i]<-ifelse(as.Date(protagonistdos)-event.date[i]<=7 & (protagonistdos-event.date)[i]>=0,1,weekmarker)
+Dmarker[i]<-ifelse(as.Date(protagonistdos)-event.date[i]<=2 & (protagonistdos-event.date)[i]>=0,1,Dmarker) 
+
+yearvalue[i]<-ifelse(yearmarker[i]==1,Creatinine[i],NA)
+weekvalue[i]<-ifelse(weekmarker[i]>0,Creatinine[i],NA)
+Dvalue[i]<-ifelse(Dmarker[i]>0,Creatinine[i],NA)
+
+#apply the optimal reference creatinine (which will later be chosen from yearmedian, weekmin or Dmin) across all of a patient's samples
+
+yearmedian[i]<-ave(as.numeric(yearvalue),PatientID==PatientID,FUN = function(x) median(x, na.rm = TRUE))
+weekmin[i]<-ave(as.numeric(weekvalue),PatientID==PatientID,FUN = function(x) min(x, na.rm = TRUE))
+Dmin[i]<-ave(as.numeric(weekvalue),PatientID==PatientID,FUN = function(x) min(x, na.rm = TRUE))
+
+#finds the index (investigated) creatinine of key interest, applies this value across all patient samples
+mightyvalue<-NA
+mightyvalue[i]<-Creatinine[i]
+protagonistvalue<-ave(mightyvalue,PatientID,FUN = function(x) max(x, na.rm = TRUE))
+#Finds the 48 hour difference in 2 samples taken within a 48 hour window
+
+D<-NA
+D[i]<-ifelse(as.numeric(Dmarker[i])>0,abs(Creatinine[i]-Dvalue[i]),D[i])
+RV1[i]<-mightyvalue[i]/weekmin[PatientID==PatientID]
+RV2[i]<-mightyvalue[i]/yearmedian[PatientID==PatientID]
+RV_ratio<-ifelse(is.na(RV1),RV2,RV1)
+
+###################################################################################
+
+AKIyear[i]<-ifelse((mightyvalue[i]/yearmedian[i])>=1.5 & !is.na(yearmedian[i]) & (mightyvalue[i]>(3*RV_ratio[i])|RV_ratio[i]>=1.5),1,0)
+AKIweek[i]<-ifelse((mightyvalue[i]/weekmin[i])>=1.5 & !is.na(weekmin[i]) & (mightyvalue[i]>(3*RV_ratio[i])|RV_ratio[i]>=1.5),1,0)
+AKIyear[i]<-ifelse(is.na(AKIyear[i]) & !is.na(yearmedian[i]) & RV_ratio[i]<1.5 & D[i]>26,1,AKIyear[i])
+AKIweek[i]<-ifelse(is.na(AKIweek[i]) & weekmin[i]>0 & RV_ratio[i]<1.5 & D[i]>26,1,AKIweek[i])}
+
+#END OF LOOP
+
+###################################################################################
+
+#Split into AKI 'episodes'
+#DIVIDE AKI INTO 90 DAY SESSIONS
+
+#Assign an akicounter value of 1 to all AKI blood tests
+a<-a[AKIweek==1|AKIyear==1,]
+a<-a[order(PatientID,event.date),]
+a$AKIcounter<-1
+a$PatientID<-as.factor(a$PatientID)
+attach(a)
+
+a<-as.data.table(a)
+a[, lag.date := c(NA, event.date[-.N]), by = PatientID]
+a$add<-ifelse(as.numeric(event.date)-a$lag.date>90,1,0)
+attach(a)
+
+#Add +1 to aki counter if the date of the sample was >90 days after the first sample with an akicounter value of 1
+
+a$add<-ifelse(is.na(a$add),0,a$add)
+a$AKIcounter==1
+
+for(x in 2:length(a$AKIcounter)){
+a$AKIcounter[x]<-ifelse(PatientID[x]==PatientID[x-1],
+a$AKIcounter[x-1]+a$add[x],1)}
+summary(a$AKIcounter)
+attach(a)
+
+a<-a[,c("PatientID","event.date","AKIcounter")]
+save(a,file="a.rda")
+##################################################################################
+
+#ATTACH AKI COUNTER TO PRIMARY TABLE
+
+load("crea.rep.rda")
+load("a.rda")
+indx1 <-neardate(crea.rep$PatientID, a$PatientID, crea.rep$event.date, a$event.date, best="prior")
+crea.rep$NoAKIepisodes<-unlist(a[indx1, "AKIcounter"])
+crea.rep$NoAKIepisodes<-ifelse(is.na(crea.rep$NoAKIepisodes),0,crea.rep$NoAKIepisodes)
+
+Press h to open a hovercard with more details. 
