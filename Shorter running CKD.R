@@ -1,4 +1,4 @@
-otKD diagnostic codes for shorter running with larger datasets
+#otKD diagnostic codes for shorter running with larger datasets
 
 #CKD IS STAGED HERE BASED ON MAINTENANCE OF EACH EGFR LEVEL FOR A MINIMUM OF 3 MONTHS
 #CKD HAS BEEN DERIVED HERE FROM CKD-EPI EGFR- DECIDE IN ADVANCE WHICH EQUATION TO USE.
@@ -10,38 +10,45 @@ load("crea.rep.rda") #table featuring 1 row per patient per day with maximum cre
 #Isolate the first qualifying test for each patient
 
 crea.rep$KDmark<-ifelse(!is.na(crea.rep$CKDEPIeGFR) & crea.rep$CKDEPIeGFR<60,1,0)
-CKs<-crea.rep[crea.rep$KDmark==1,c("PatientID","eventdate","KDmark")] #Kidney Injury flagged tests
+CKs<-crea.rep[crea.rep$KDmark==1,c("PatientID","event.date","KDmark")] #Kidney Injury flagged tests
 
 #Create a dataset including all data from patients with at least 1 KD flag:
 CKpot<-crea.rep[crea.rep$PatientID %in% CKs$PatientID,] 
-CKpot$EntryDate2<-as.Date(as.character(CKpot$eventdate),format="%Y%m%d")
+#CKpot$EntryDate2<-as.Date(as.character(CKpot$event.date),format="%Y-%m-%d")
 
-CKpot<-CKpot[CKpot$entrydate>="20070101",]
+#CKpot<-CKpot[CKpot$entrydate>="20070101",]
 
 #Mark a 90 day lookback period
-CKpot$EntryDate1<-as.Date(as.character(CKpot$eventdate),format="%Y%m%d")-90
-CKpot<-CKpot[,c("PatientID","eventdate","KDmark","EntryDate1","EntryDate2","CKDEPIeGFR")] 
+CKpot$EntryDate1<-CKpot$event.date-90
+CKpot<-CKpot[,c("PatientID","event.date","KDmark","EntryDate1","CKDEPIeGFR")] 
 
 ############################################################################################## CHECKED
 
 #Diagnose CKD
 
 #If eGFR under 60 is not sustained for 90 days, recode KDmark as 0
+library("doParallel")
+library("foreach")
 
-for (i in 1:length(CKpot$PatientID)){
-CKs<-crea.rep[crea.rep$PatientID==CKpot$PatientID[i] &
-crea.rep$eventdate>CKpot$EntryDate1[i] & crea.rep$eventdate<=CKpot$EntryDate2[i]] %>%
-summarize(CKD=min(KDmark), MaxCKD=max(crea.rep$CKDEPIeGFR),MinCKD=min(crea.rep$CKDEPIeGFR)) %>%
-as.data.frame
+cl <- makeCluster(10)
+registerDoParallel(cl)
 
-CKpot$CKD[i]<-CKs$CKD
-CKpot$MaxCKD[i]<-CKs$MaxCKD
-CKpot$MinCKD[i]<-CKs$MinCKD
-}
+system.time(tmp <- foreach(x = 1:10, .combine=c("rbind"), .packages = "dplyr", .export = ls()) %dopar% {
+  
+  crea.rep[crea.rep$PatientID==CKpot$PatientID[x] & # select data within 90 days from the ith eventfor current patient
+                crea.rep$event.date>CKpot$EntryDate1[x] & 
+                  crea.rep$event.date<=CKpot$event.date[x],] %>%
+        summarize(CKD=min(KDmark), MaxCKD=max(CKDEPIeGFR),MinCKD=min(CKDEPIeGFR)) %>%
+          as.data.frame %>%
+            bind_cols(CKpot[x, ])
+ 
+})
+
+stopCluster(cl)
 
 #CKD is 1 if the test qualifies and there is no normal test within 3 months prior
 #At this stage some are temporarily falsely positively identified that have no lookback test
-Near date match EntryDate1 (90 days prior date)- to entries from the full dataset
+#Near date match EntryDate1 (90 days prior date)- to entries from the full dataset
 #neardate preferably matches to a prior entry if one is available
 #if the closest match is before EntryDate1 (data from more than 90 days prior available), retain row.
 indx1<-neardate(CKpot$PatientID,crea.rep$PatientID,CKpot$EntryDate1,crea.rep$event.date,best="prior",nomatch=NA_integer_)
