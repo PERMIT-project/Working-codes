@@ -46,7 +46,7 @@ yearmarker<-0
 weekmarker<-0
 Dmarker<-0
 yearmedian<-0
-eekmin<-0
+weekmin<-0
 Dmin<-0
 yearvalue<-0
 weekvalue<-0
@@ -76,7 +76,7 @@ protagonistdos<-ave(mightydate,PatientID,FUN=max)
 #Apply each test date to all other tests from the same patient to find the time difference
 
 yearmarker[i]<-ifelse(as.Date(protagonistdos)-event.date[i]<=365 & (protagonistdos-event.date[i]>90),1,yearmarker)
-ekmarker[i]<-ifelse(as.Date(protagonistdos)-event.date[i]<=7 & (protagonistdos-event.date)[i]>=0,1,weekmarker)
+weekmarker[i]<-ifelse(as.Date(protagonistdos)-event.date[i]<=7 & (protagonistdos-event.date)[i]>=0,1,weekmarker)
 Dmarker[i]<-ifelse(as.Date(protagonistdos)-event.date[i]<=2 & (protagonistdos-event.date)[i]>=0,1,Dmarker) 
 
 yearvalue[i]<-ifelse(yearmarker[i]==1,Creatinine[i],NA)
@@ -85,9 +85,9 @@ Dvalue[i]<-ifelse(Dmarker[i]>0,Creatinine[i],NA)
 
 #apply the optimal reference creatinine (which will later be chosen from yearmedian, weekmin or Dmin) across all of a patient's samples
 
-yearmedian[i]<-ave(as.numeric(yearvalue),PatientID==PatientID,FUN = function(x) median(x, na.rm = TRUE))
-weekmin[i]<-ave(as.numeric(weekvalue),PatientID==PatientID,FUN = function(x) min(x, na.rm = TRUE))
-Dmin[i]<-ave(as.numeric(weekvalue),PatientID==PatientID,FUN = function(x) min(x, na.rm = TRUE))
+yearmedian[i]<-ave(as.numeric(yearvalue),PatientID==PatientID[i],FUN = function(x) median(x, na.rm = TRUE))
+weekmin[i]<-ave(as.numeric(weekvalue),PatientID==PatientID[i],FUN = function(x) min(x, na.rm = TRUE))
+Dmin[i]<-ave(as.numeric(weekvalue),PatientID==PatientID[i],FUN = function(x) min(x, na.rm = TRUE))
 
 #finds the index (investigated) creatinine of key interest, applies this value across all patient samples
 mightyvalue<-NA
