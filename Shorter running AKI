@@ -12,12 +12,12 @@ library(data.table)
 
 ###################################################################################
 
-#SELECT ELIGIBLE PATIENTS
+#REDUCE TO ELIGIBLE PATIENTS- those with any abnormal creatinine ever recorded
 crea.rep$KDmark<-ifelse(!is.na(crea.rep$MDRDeGFR)&crea.rep$MDRDeGFR<60,1,0)
 KD<-crea.rep[crea.rep$KDmark>0,]
 a<-crea.rep[crea.rep$PatientID %in% KD$PatientID & !is.na(crea.rep$PatientID),]
 a$event.date<-as.Date(as.character(a$EntryDate),format="%Y%m%d")
-attach(a)
+
 ########################################################################### 
 
 #Find max creatinine per day per patient
@@ -27,11 +27,9 @@ sorted <- a %>%
           mutate(protagonist=row_number())
 <-data.frame(sorted)
 attach(a)
-
 #########################################################################
 
 # PART 2 - LOOP FOR AKI FLAGS 
-
 #LOOP FORMATION FOR COMPARING EACH TEST WITH PREVIOUS TESTS
 #CREATE A MARKER VARIABLE FOR EACH TIME AKI EALERT CRITERIA SATISFIED
 
