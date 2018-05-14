@@ -1,4 +1,5 @@
 #AKI diagnostic code optimised for faster running with larger datasets
+#BASED ON THE NHS UK AKI ALGORITHM, OMITTING INDICATORS FROM URINE ALBUMIN
 
 load("crea.rep.rda") #Primary table with 1 row per patient per date with creatinine summarised as max per date
 
@@ -8,8 +9,6 @@ library(lubridate)
 library(dplyr) 
 library(survival) #For neardate matching
 library(data.table)
-
-BASED ON THE NHS UK AKI ALGORITHM, OMITTING INDICATORS FROM URINE ALBUMIN
 
 ###################################################################################
 
@@ -43,7 +42,7 @@ mightydate<-NA
 mightyvalue<-NA
 protagonistdos<-NA
 yearmarker<-0
-weekmarker<-0
+ekmarker<-0
 Dmarker<-0
 yearmedian<-0
 weekmin<-0
@@ -61,8 +60,7 @@ protagonistvalue<-0
  if(Gender[i]=="M"){    
     ref.low=62
    ref.up=115
-    } else {    
-    ref.low=44    
+    } else {        ref.low=44    
     ref.up=97}
 
 a <-a[order(PatientID, event.date),] 
@@ -87,7 +85,7 @@ Dvalue[i]<-ifelse(Dmarker[i]>0,Creatinine[i],NA)
 
 yearmedian[i]<-ave(as.numeric(yearvalue),PatientID==PatientID[i],FUN = function(x) median(x, na.rm = TRUE))
 weekmin[i]<-ave(as.numeric(weekvalue),PatientID==PatientID[i],FUN = function(x) min(x, na.rm = TRUE))
-Dmin[i]<-ave(as.numeric(weekvalue),PatientID==PatientID[i],FUN = function(x) min(x, na.rm = TRUE))
+Dmin[i]<-ave(as.numeric(Dvalue),PatientID==PatientID[i],FUN = function(x) min(x, na.rm = TRUE))
 
 #finds the index (investigated) creatinine of key interest, applies this value across all patient samples
 mightyvalue<-NA
@@ -101,18 +99,16 @@ RV1[i]<-mightyvalue[i]/weekmin[PatientID==PatientID]
 RV2[i]<-mightyvalue[i]/yearmedian[PatientID==PatientID]
 RV_ratio<-ifelse(is.na(RV1),RV2,RV1)
 
-###################################################################################
-
 AKIyear[i]<-ifelse((mightyvalue[i]/yearmedian[i])>=1.5 & !is.na(yearmedian[i]) & (mightyvalue[i]>(3*RV_ratio[i])|RV_ratio[i]>=1.5),1,0)
 AKIweek[i]<-ifelse((mightyvalue[i]/weekmin[i])>=1.5 & !is.na(weekmin[i]) & (mightyvalue[i]>(3*RV_ratio[i])|RV_ratio[i]>=1.5),1,0)
 AKIyear[i]<-ifelse(is.na(AKIyear[i]) & !is.na(yearmedian[i]) & RV_ratio[i]<1.5 & D[i]>26,1,AKIyear[i])
-AKIweek[i]<-ifelse(is.na(AKIweek[i]) & weekmin[i]>0 & RV_ratio[i]<1.5 & D[i]>26,1,AKIweek[i])}
+AKIweek[i]<-ifelse(is.na(AKIweek[i]) & weekmin[i]>0 & RV_ratio[i]<1.5 & D[i]>26,1,AKIweek[i])
+}
 
 #END OF LOOP
 
 ###################################################################################
 
-#Split into AKI 'episodes'
 #DIVIDE AKI INTO 90 DAY SESSIONS
 
 #Assign an akicounter value of 1 to all AKI blood tests
@@ -130,7 +126,6 @@ attach(a)
 #Add +1 to aki counter if the date of the sample was >90 days after the first sample with an akicounter value of 1
 
 a$add<-ifelse(is.na(a$add),0,a$add)
-a$AKIcounter==1
 
 for(x in 2:length(a$AKIcounter)){
 a$AKIcounter[x]<-ifelse(PatientID[x]==PatientID[x-1],
@@ -144,8 +139,7 @@ save(a,file="a.rda")
 
 #ATTACH AKI COUNTER TO PRIMARY TABLE
 
-load("crea.rep.rda")
-load("a.rda")
+load("crea.rep.rda") #RELOAD TO EXCLUDE TEMP COLUMNS CREATED
 indx1 <-neardate(crea.rep$PatientID, a$PatientID, crea.rep$event.date, a$event.date, best="prior")
 crea.rep$NoAKIepisodes<-unlist(a[indx1, "AKIcounter"])
 crea.rep$NoAKIepisodes<-ifelse(is.na(crea.rep$NoAKIepisodes),0,crea.rep$NoAKIepisodes)
