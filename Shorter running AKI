@@ -33,14 +33,13 @@ attach(a)
 #LOOP FORMATION FOR COMPARING EACH TEST WITH PREVIOUS TESTS
 #CREATE A MARKER VARIABLE FOR EACH TIME AKI EALERT CRITERIA SATISFIED
 
-ewAKI<-0
 AKIyear<-0
 AKIweek<-0
 mightydate<-NA
 mightyvalue<-NA
 protagonistdos<-NA
 yearmarker<-0
-ekmarker<-0
+weekmarker<-0
 Dmarker<-0
 yearmedian<-0
 weekmin<-0
